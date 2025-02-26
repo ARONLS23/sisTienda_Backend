@@ -32,6 +32,9 @@ public class Usuario {
     @Column(nullable = true)
     private String nombre;
 
+    @Column(nullable = false)
+    private boolean enabled = false;
+
     @Column(nullable = false, updatable = false)
     private LocalDateTime fechaRegistro;
 

@@ -4,10 +4,17 @@ import com.arrows_tienda.Dto.AuthRequestDto;
 import com.arrows_tienda.Dto.AuthResponseDto;
 import com.arrows_tienda.Dto.AuthStatus;
 import com.arrows_tienda.Service.AuthService;
+import com.arrows_tienda.Service.impl.AuthServiceImpl;
+import com.arrows_tienda.Token.VerificationToken;
+import com.arrows_tienda.Token.VerificationTokenRepository;
+import jakarta.servlet.http.HttpServletRequest;
+import jakarta.servlet.http.HttpServletResponse;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
+
+import java.io.IOException;
 
 @RestController
 @RequiredArgsConstructor
@@ -16,6 +23,8 @@ import org.springframework.web.bind.annotation.*;
 public class AuthController {
 
     private final AuthService authService;
+    private final AuthServiceImpl authServiceImpl;
+    private final VerificationTokenRepository tokenRepository;
 
     @PostMapping("/login")
     public ResponseEntity<AuthResponseDto> login(@RequestBody AuthRequestDto authRequestDto) {
@@ -30,10 +39,12 @@ public class AuthController {
             String errorMessage = e.getMessage();
             AuthStatus status = AuthStatus.LOGIN_FAILDED;
 
-            if (e.getMessage().contains("Bad credentials")) {
-                errorMessage = "Usuario o contraseña incorrectas";
-            } else if (e.getMessage().contains("User not found")) {
+            if (errorMessage.contains("Usuario no encontrado")) {
                 errorMessage = "Usuario no encontrado";
+            } else if (errorMessage.contains("La cuenta no ha sido verificada")) {
+                errorMessage = "La cuenta no ha sido verificada. Por favor, revise su correo electrónico.";
+            } else if (errorMessage.contains("Bad credentials")) {
+                errorMessage = "Usuario o contraseña incorrectos";
             }
 
             var authResponseDto = new AuthResponseDto(null, status, errorMessage);
@@ -64,6 +75,46 @@ public class AuthController {
 
             return ResponseEntity.status(HttpStatus.CONFLICT).body(authResponseDto);
         }
+    }
+
+    @GetMapping("/verifyEmail")
+    public void verifyEmail(@RequestParam String token, HttpServletResponse response) throws IOException {
+        System.out.println("Verifying email: " + token);
+
+        try {
+            VerificationToken theToken = tokenRepository.findByToken(token);
+            if (theToken == null) {
+                System.out.println("Token not found");
+                response.sendRedirect("http://localhost:3000/verification?status=invalid-token");
+                return;
+            }
+
+            String result = authService.validateToken(token);
+            System.out.println("Resultado de la validación: " + result);
+
+            switch (result) {
+                case "valido":
+                    response.sendRedirect("http://localhost:3000/verification?status=success");
+                    break;
+
+                case "expired":
+                    response.sendRedirect("http://localhost:3000/verification?status=expired");
+                    break;
+
+                default:
+                    response.sendRedirect("http://localhost:3000/verification?status=error");
+            }
+
+        } catch (Exception e) {
+            System.out.println("Error durante la validación: " + e.getMessage());
+            e.printStackTrace();
+            response.sendRedirect("http://localhost:3000/verification?status=error");
+        }
+
+    }
+
+    public String applicationUrl(HttpServletRequest request) {
+        return "http://" + request.getServerName() + ":" + request.getServerPort() + request.getContextPath();
     }
 
 
